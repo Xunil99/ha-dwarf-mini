@@ -1,0 +1,11 @@
+{
+  "domain": "dwarf_mini",
+  "name": "DWARF mini",
+  "codeowners": ["@Xunil99"],
+  "config_flow": true,
+  "documentation": "https://github.com/Xunil99/ha-dwarf-mini",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "requirements": ["protobuf>=4.25,<6"],
+  "version": "0.1.0"
+}
