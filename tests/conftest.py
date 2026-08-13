@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from aiohttp import web
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.dwarf_mini.const import DOMAIN
 
 # pytest-homeassistant-custom-component (registered as a pytest plugin via
 # its entry point) restricts component loading to core components by
@@ -18,11 +21,70 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 
 
 @pytest.fixture
+def mock_config_entry():
+    return MockConfigEntry(domain=DOMAIN, data={"host": "192.168.2.50", "port": 9900})
+
+
+class _FakeWs:
+    """Minimal aiohttp.ClientWebSocketResponse stand-in for mock_dwarf_connect."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+async def _fake_reader_loop() -> None:
+    """Stand-in for DwarfMiniClient._reader_loop(): blocks until cancelled.
+
+    Mirrors the real reader loop's own CancelledError handling (swallow, end
+    cleanly) so a caller doing `self._reader_task.cancel(); await
+    self._reader_task` (close()) or `await self._reader_task` (run_forever())
+    sees the same "completes with no exception" behavior the real loop
+    produces on a deliberate close(), rather than an unhandled CancelledError.
+    """
+    try:
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        pass
+
+
+async def _fake_connect(self) -> None:
+    """side_effect for mock_dwarf_connect: a faithful (not just no-op) fake.
+
+    Sets `_ws`/`_reader_task` the way the real connect() does, rather than
+    leaving them None. Without this, `run_forever()`'s
+    `assert self._reader_task is not None` (evaluated right after connect())
+    fails - but that AssertionError is an Exception, so run_forever()'s own
+    broad `except Exception` swallows it and logs a misleading "connection
+    lost, retrying" warning instead of surfacing a real failure. This isn't
+    just theoretical: it's silently triggered by any test that reaches a
+    *real* async_setup_entry with this mock active - e.g. a config flow's
+    async_create_entry auto-triggers entry setup, which starts run_forever()
+    as a background task against a freshly constructed client whose
+    (mocked) connect() would otherwise leave _reader_task unset.
+    Uses autospec=True (see the patch() call below) so `self` is passed in
+    like a real bound method call - a plain AsyncMock replacing a class
+    method does not bind `self` automatically.
+    """
+    self._closing_event.clear()
+    if self.connected:
+        return
+    self._ws = _FakeWs()
+    self._reader_task = asyncio.create_task(_fake_reader_loop())
+
+
+@pytest.fixture
 def mock_dwarf_connect():
-    """Patch DwarfMiniClient.connect to succeed as a no-op."""
+    """Patch DwarfMiniClient.connect to succeed with a realistic fake state.
+
+    See _fake_connect()'s docstring for why this can't be a plain no-op.
+    """
     with patch(
         "custom_components.dwarf_mini.client.DwarfMiniClient.connect",
-        new_callable=AsyncMock,
+        autospec=True,
+        side_effect=_fake_connect,
     ) as mock_connect:
         yield mock_connect
 
