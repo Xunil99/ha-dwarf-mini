@@ -28,7 +28,9 @@
     },
     "button": {
       "start_capture": { "name": "Aufnahme starten" },
-      "stop_capture": { "name": "Aufnahme stoppen" }
+      "stop_capture": { "name": "Aufnahme stoppen" },
+      "stop_goto": { "name": "GoTo stoppen" },
+      "autofocus": { "name": "Autofokus" }
     },
     "select": {
       "goto_target": { "name": "GoTo-Ziel" }

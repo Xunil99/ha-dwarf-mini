@@ -12,13 +12,18 @@ from .client import DwarfMiniClient
 from .const import (
     CMD_ASTRO_START_CAPTURE_RAW_LIVE_STACKING,
     CMD_ASTRO_STOP_CAPTURE_RAW_LIVE_STACKING,
+    CMD_ASTRO_STOP_ONE_CLICK_GOTO,
+    CMD_FOCUS_START_ASTRO_AUTO_FOCUS,
     DOMAIN,
     MODULE_ASTRO,
+    MODULE_FOCUS,
 )
 from .proto_messages import (
     ComResponse,
+    ReqAstroAutoFocus,
     ReqCaptureRawLiveStacking,
     ReqStopCaptureRawLiveStacking,
+    ReqStopOneClickGoto,
 )
 
 
@@ -32,6 +37,8 @@ async def async_setup_entry(
         [
             DwarfMiniStartCaptureButton(client, entry),
             DwarfMiniStopCaptureButton(client, entry),
+            DwarfMiniStopGotoButton(client, entry),
+            DwarfMiniAutofocusButton(client, entry),
         ]
     )
 
@@ -102,5 +109,63 @@ class DwarfMiniStopCaptureButton(_DwarfMiniBaseButton):
             CMD_ASTRO_STOP_CAPTURE_RAW_LIVE_STACKING,
             ReqStopCaptureRawLiveStacking(),
             ComResponse,
+        )
+        self._raise_if_rejected(response)
+
+
+class DwarfMiniStopGotoButton(_DwarfMiniBaseButton):
+    _attr_translation_key = "stop_goto"
+
+    def __init__(self, client: DwarfMiniClient, entry: DwarfMiniConfigEntry) -> None:
+        super().__init__(client, entry, "stop_goto")
+
+    async def async_press(self) -> None:
+        # CMD_ASTRO_STOP_ONE_CLICK_GOTO's response type: astro.proto defines
+        # no dedicated "ResStopOneClickGoto" message (the message immediately
+        # after ReqStopOneClickGoto is the unrelated
+        # ReqCaptureWideRawLiveStacking, not a stop-specific response), and
+        # this codebase's proto_messages.py mirrors that gap. ComResponse is
+        # verified correct here against dwarfAlp's own implementation:
+        # session.py's telescope_abort_slew() sends ReqStopOneClickGoto()
+        # with no expected_responses override, which falls back to
+        # ws_client.py's send_and_check()/send_command() default of
+        # ComResponse. ResOneClickGoto (step/code/all_end) is used
+        # exclusively for the start path (multi-phase slew progress), never
+        # for stop.
+        response = await self._client.send_request(
+            MODULE_ASTRO,
+            CMD_ASTRO_STOP_ONE_CLICK_GOTO,
+            ReqStopOneClickGoto(),
+            ComResponse,
+        )
+        self._raise_if_rejected(response)
+
+
+class DwarfMiniAutofocusButton(_DwarfMiniBaseButton):
+    _attr_translation_key = "autofocus"
+
+    def __init__(self, client: DwarfMiniClient, entry: DwarfMiniConfigEntry) -> None:
+        super().__init__(client, entry, "autofocus")
+
+    async def async_press(self) -> None:
+        # mode=1 is a fixed v1 default per the phase 2 design doc
+        # (ReqAstroAutoFocus{mode: uint32=1}), matching the other buttons'
+        # fixed-default pattern - v1 has no autofocus-mode-selection UI.
+        #
+        # timeout=30.0 instead of send_request()'s plain 10s default:
+        # dwarfAlp's own session.py explicitly avoids the plain default for
+        # this exact command too - _autofocus_before_calibration() uses a
+        # much longer, configurable calibration_autofocus_timeout_seconds
+        # instead, with a comment noting the command ack is only a
+        # confirmation and the real autofocus completion arrives later via
+        # the V3ResNotifyAutoFocusState notification (state=3) - i.e. the
+        # device-side ack for this specific command is known to sometimes
+        # lag past a plain 10s bound.
+        response = await self._client.send_request(
+            MODULE_FOCUS,
+            CMD_FOCUS_START_ASTRO_AUTO_FOCUS,
+            ReqAstroAutoFocus(mode=1),
+            ComResponse,
+            timeout=30.0,
         )
         self._raise_if_rejected(response)

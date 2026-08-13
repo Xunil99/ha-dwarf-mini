@@ -28,7 +28,9 @@
     },
     "button": {
       "start_capture": { "name": "Start capture" },
-      "stop_capture": { "name": "Stop capture" }
+      "stop_capture": { "name": "Stop capture" },
+      "stop_goto": { "name": "Stop GoTo" },
+      "autofocus": { "name": "Autofocus" }
     },
     "select": {
       "goto_target": { "name": "GoTo target" }
