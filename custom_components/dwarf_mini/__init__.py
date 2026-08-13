@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 
 from .client import DwarfMiniClient
 from .const import (
@@ -21,6 +22,12 @@ from .const import (
     SERVICE_GOTO_COORDINATES,
 )
 from .goto import async_goto_dso
+
+# Config-entry-only integration (config_flow: true in manifest.json, no YAML
+# setup) - same CONFIG_SCHEMA guardian uses for the same reason: it makes an
+# accidental `dwarf_mini:` section in configuration.yaml fail loudly instead
+# of being silently ignored.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 # The full v1 platform list. Each platform's async_setup_entry receives the
 # same `entry: DwarfMiniConfigEntry` and reads the client via
@@ -44,10 +51,10 @@ SERVICE_GOTO_COORDINATES_SCHEMA = vol.Schema(
 def _client_for_device_id(hass: HomeAssistant, device_id: str) -> DwarfMiniClient:
     """Resolve a device_id (from a service call) to its DwarfMiniClient.
 
-    Registered at the domain level (not per config entry - see
-    async_setup_entry's has_service guard below), so a service call must
-    itself say which of potentially several configured DWARF mini devices it
-    targets, the same way core integrations like `guardian` do it.
+    Registered once in async_setup (not per config entry - see
+    async_setup below), so a service call must itself say which of
+    potentially several configured DWARF mini devices it targets, the same
+    way core integrations like `guardian` do it.
     """
     device_registry = dr.async_get(hass)
     device_entry = device_registry.async_get(device_id)
@@ -55,8 +62,23 @@ def _client_for_device_id(hass: HomeAssistant, device_id: str) -> DwarfMiniClien
         raise HomeAssistantError(f"Unknown device_id: {device_id}")
     for entry_id in device_entry.config_entries:
         entry = hass.config_entries.async_get_entry(entry_id)
-        if entry is not None and entry.domain == DOMAIN:
+        if entry is None or entry.domain != DOMAIN:
+            continue
+        try:
             return entry.runtime_data
+        except AttributeError as err:
+            # entry.runtime_data is deleted by HA itself (object.__delattr__)
+            # the moment async_unload_entry returns True - see
+            # homeassistant.config_entries.ConfigEntry.async_unload. This
+            # service is registered once in async_setup and never torn down
+            # per entry, so it stays callable across an entry's whole
+            # lifecycle, including while that entry is unloaded (a normal
+            # integration "reload" unloads-then-reloads; the entry can also
+            # simply be disabled and left unloaded). A call landing in that
+            # window must not surface the raw AttributeError to the caller.
+            raise HomeAssistantError(
+                f"DWARF mini device_id {device_id} is not currently loaded"
+            ) from err
     raise HomeAssistantError(f"No DWARF mini config entry for device_id: {device_id}")
 
 
@@ -72,6 +94,28 @@ async def _async_handle_goto_coordinates(call: ServiceCall) -> None:
     dec = call.data[ATTR_DEC_DEGREES]
     target_name = call.data.get(ATTR_TARGET_NAME) or f"RA {ra}h Dec {dec}\N{DEGREE SIGN}"
     await async_goto_dso(call.hass, client, ra=ra, dec=dec, target_name=target_name)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the DWARF mini integration - register domain-wide services.
+
+    Called once at HA startup (or when the first config entry for this
+    domain is set up), independent of how many config entries exist - the
+    correct place for a domain-level, device-targeted service, matching how
+    core integrations like `guardian` register theirs (async_setup, not
+    async_setup_entry). No has_service guard needed here since this runs
+    exactly once regardless of config entry count, and no per-entry
+    unregister is needed either: the handler resolves the right client
+    per-call via device_id (see _client_for_device_id above), so the
+    service's own lifecycle is independent of any single entry's.
+    """
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GOTO_COORDINATES,
+        _async_handle_goto_coordinates,
+        schema=SERVICE_GOTO_COORDINATES_SCHEMA,
+    )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: DwarfMiniConfigEntry) -> bool:
@@ -96,20 +140,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: DwarfMiniConfigEntry) ->
     entry.async_create_background_task(
         hass, client.run_forever(), name=f"dwarf_mini-{entry.entry_id}"
     )
-
-    # Domain-level service, not per-entry: guarded by has_service so a
-    # second (or third) configured DWARF mini device doesn't re-register it -
-    # the handler itself resolves which device/client a given call targets
-    # via its device_id field (see _client_for_device_id above), matching how
-    # core integrations (e.g. `guardian`) register a single device-targeted
-    # service shared across all their config entries.
-    if not hass.services.has_service(DOMAIN, SERVICE_GOTO_COORDINATES):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_GOTO_COORDINATES,
-            _async_handle_goto_coordinates,
-            schema=SERVICE_GOTO_COORDINATES_SCHEMA,
-        )
 
     if PLATFORMS:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
