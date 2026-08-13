@@ -21,10 +21,14 @@ from .const import (
     CMD_NOTIFY_ELE,
     CMD_NOTIFY_PROGRASS_CAPTURE_RAW_LIVE_STACKING,
     CMD_NOTIFY_STATE_CAPTURE_RAW_LIVE_STACKING,
+    CMD_SYSTEM_SET_MASTERLOCK,
+    MODULE_SYSTEM,
     OPERATION_STATE_NAMES,
 )
 from .proto_messages import (
+    ComResponse,
     ComResWithInt,
+    ReqsetMasterLock,
     ResNotifyProgressCaptureRawLiveStacking,
     TYPE_NOTIFICATION,
     TYPE_REQUEST,
@@ -102,6 +106,44 @@ class DwarfMiniClient:
             self._ws = await self._session.ws_connect(self._ws_url, heartbeat=None)
             self._reader_task = asyncio.create_task(self._reader_loop())
             self._reader_task.add_done_callback(self._on_reader_task_done)
+        # Deliberately *outside* the `async with self._lock:` block above (and
+        # only reached when this call is the one that just established the
+        # connection - both early `if self.connected: return`s above skip it):
+        # _claim_master_lock() calls send_request(), which itself calls
+        # `await self.connect()` at its start. self._lock is not reentrant,
+        # so calling this from inside the lock would deadlock (or at best
+        # cause confusing re-entry). By the time we get here `self._ws` and
+        # `self._reader_task` are already set and the lock is free, so that
+        # inner connect() call just hits the `if self.connected: return`
+        # fast path above and send_request() can proceed normally.
+        await self._claim_master_lock()
+
+    async def _claim_master_lock(self) -> None:
+        """Best-effort: tell the device this client is now its active controller.
+
+        The device does not push most state notifications (battery, capture state,
+        ...) to a websocket client until it has claimed the "master lock" via
+        CMD_SYSTEM_SET_MASTERLOCK - ported from dwarfAlp's session.py
+        `_ensure_master_lock` (https://github.com/acocalypso/dwarfAlp, GPLv3).
+        Failure here is logged, not raised: this runs on every connect() call,
+        including short-lived connectivity-probe connections (e.g. the config
+        flow's), which should still be able to report "reachable" even if another
+        client currently holds the lock.
+        """
+        try:
+            response = await self.send_request(
+                MODULE_SYSTEM,
+                CMD_SYSTEM_SET_MASTERLOCK,
+                ReqsetMasterLock(lock=True),
+                ComResponse,
+                timeout=15.0,
+            )
+            if response.code != 0:
+                _LOGGER.warning(
+                    "dwarf_mini: master lock request rejected (code=%s)", response.code
+                )
+        except Exception:  # noqa: BLE001 - any failure here must not break connect()
+            _LOGGER.warning("dwarf_mini: failed to claim master lock", exc_info=True)
 
     async def close(self) -> None:
         # Signal run_forever() (if a caller is running it as a background

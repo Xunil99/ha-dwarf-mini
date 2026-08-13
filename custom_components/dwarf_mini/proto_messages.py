@@ -31,6 +31,7 @@ __all__ = [
     "ReqCaptureRawLiveStacking",
     "ReqStopCaptureRawLiveStacking",
     "ResNotifyProgressCaptureRawLiveStacking",
+    "ReqsetMasterLock",
     "TYPE_REQUEST",
     "TYPE_REQUEST_RESPONSE",
     "TYPE_NOTIFICATION",
@@ -101,6 +102,7 @@ def _build_pool() -> descriptor_pool.DescriptorPool:
                 _FieldSpec("target_name", 7, F.TYPE_STRING),
             ),
         ),
+        _MessageSpec("ReqsetMasterLock", (_FieldSpec("lock", 1, F.TYPE_BOOL),)),
     )
 
     for spec in messages:
@@ -133,3 +135,4 @@ ReqStopCaptureRawLiveStacking = _message_class("ReqStopCaptureRawLiveStacking")
 ResNotifyProgressCaptureRawLiveStacking = _message_class(
     "ResNotifyProgressCaptureRawLiveStacking"
 )
+ReqsetMasterLock = _message_class("ReqsetMasterLock")

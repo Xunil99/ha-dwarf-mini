@@ -6,7 +6,13 @@ import pytest
 from aiohttp import web
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.dwarf_mini.const import CONF_HOST, CONF_PORT, DOMAIN
+from custom_components.dwarf_mini.const import (
+    CMD_SYSTEM_SET_MASTERLOCK,
+    CONF_HOST,
+    CONF_PORT,
+    DOMAIN,
+    MODULE_SYSTEM,
+)
 
 # pytest-homeassistant-custom-component (registered as a pytest plugin via
 # its entry point) restricts component loading to core components by
@@ -149,9 +155,25 @@ async def fake_dwarf_server(aiohttp_client, socket_enabled):
     that plugin disables real socket.socket() creation by default for every
     test (a Home Assistant core testing safety net), which would otherwise
     break aiohttp_client's real TCP test server used here.
+
+    `handlers` is pre-seeded with a default CMD_SYSTEM_SET_MASTERLOCK handler
+    that accepts the claim: connect() now sends that claim automatically
+    (see DwarfMiniClient._claim_master_lock) and awaits its response before
+    returning, so leaving it unhandled here would make every direct
+    `await client.connect()` in this test suite block for the real 15s
+    request timeout instead of failing fast. Tests that specifically want to
+    exercise a rejected/unanswered master lock (e.g.
+    test_connect_succeeds_even_if_master_lock_is_rejected) override this
+    same dict key, same as any other handler.
     """
+    from custom_components.dwarf_mini.proto_messages import ComResponse
+
     app = web.Application()
-    app["handlers"] = {}
+    app["handlers"] = {
+        (MODULE_SYSTEM, CMD_SYSTEM_SET_MASTERLOCK): (
+            lambda data: ComResponse(code=0).SerializeToString()
+        ),
+    }
     app["clients"] = []
 
     async def ws_handler(request):

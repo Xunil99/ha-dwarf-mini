@@ -328,3 +328,49 @@ async def test_send_request_gets_response(fake_dwarf_server):
     )
     assert response.code == 0
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_connect_claims_master_lock(fake_dwarf_server):
+    """Regression test: the device does not push most state notifications
+    (battery, capture state, ...) to a websocket client until that client
+    has claimed the "master lock" via CMD_SYSTEM_SET_MASTERLOCK. connect()
+    must send that claim automatically, matching dwarfAlp's
+    `_ensure_master_lock` behavior."""
+    from custom_components.dwarf_mini.const import CMD_SYSTEM_SET_MASTERLOCK, MODULE_SYSTEM
+    from custom_components.dwarf_mini.proto_messages import ComResponse, ReqsetMasterLock
+
+    received = []
+
+    def handler(data: bytes) -> bytes:
+        msg = ReqsetMasterLock()
+        msg.ParseFromString(data)
+        received.append(msg.lock)
+        return ComResponse(code=0).SerializeToString()
+
+    fake_dwarf_server.app["handlers"][(MODULE_SYSTEM, CMD_SYSTEM_SET_MASTERLOCK)] = handler
+
+    client = DwarfMiniClient(session=fake_dwarf_server.session, ws_url=_ws_url(fake_dwarf_server))
+    await client.connect()
+
+    assert received == [True]
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_connect_succeeds_even_if_master_lock_is_rejected(fake_dwarf_server):
+    """A master-lock claim might legitimately fail (e.g. another client
+    already holds it) - that must not prevent connect() from succeeding,
+    matching dwarfAlp's non-fatal try/except around the claim."""
+    from custom_components.dwarf_mini.const import CMD_SYSTEM_SET_MASTERLOCK, MODULE_SYSTEM
+    from custom_components.dwarf_mini.proto_messages import ComResponse
+
+    fake_dwarf_server.app["handlers"][(MODULE_SYSTEM, CMD_SYSTEM_SET_MASTERLOCK)] = (
+        lambda data: ComResponse(code=13).SerializeToString()  # some non-zero rejection code
+    )
+
+    client = DwarfMiniClient(session=fake_dwarf_server.session, ws_url=_ws_url(fake_dwarf_server))
+    await client.connect()  # must not raise
+
+    assert client.connected is True
+    await client.close()

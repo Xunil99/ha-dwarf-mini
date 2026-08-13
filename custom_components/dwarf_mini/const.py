@@ -3,7 +3,8 @@
 Module/message-type/command IDs are taken from DwarfLab's V3 websocket protocol as
 documented in dwarfAlp (https://github.com/acocalypso/dwarfAlp, GPLv3), file
 src/dwarf_alpaca/proto/protocol.proto. The OperationState values come from the same
-project's src/dwarf_alpaca/proto/notify.proto.
+project's src/dwarf_alpaca/proto/notify.proto. MODULE_SYSTEM and
+CMD_SYSTEM_SET_MASTERLOCK also come from protocol.proto.
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ TYPE_NOTIFICATION_RESPONSE = 3
 # --- ModuleId ---
 MODULE_ASTRO = 3
 MODULE_NOTIFY = 9
+MODULE_SYSTEM = 4
 
 # --- DwarfCMD (only the subset used by v1) ---
 CMD_ASTRO_START_CAPTURE_RAW_LIVE_STACKING = 11005
@@ -29,6 +31,7 @@ CMD_ASTRO_STOP_CAPTURE_RAW_LIVE_STACKING = 11006
 CMD_NOTIFY_ELE = 15201
 CMD_NOTIFY_STATE_CAPTURE_RAW_LIVE_STACKING = 15208
 CMD_NOTIFY_PROGRASS_CAPTURE_RAW_LIVE_STACKING = 15209
+CMD_SYSTEM_SET_MASTERLOCK = 13004
 
 # --- OperationState (notify.proto) ---
 STATE_IDLE = 0
