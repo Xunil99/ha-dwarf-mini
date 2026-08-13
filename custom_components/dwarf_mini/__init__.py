@@ -9,13 +9,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .client import DwarfMiniClient
 from .const import CONF_HOST, CONF_PORT
 
-# button doesn't exist yet (Task 10 creates it). That task should append its
-# platform name here once its module lands - the forwarding/unloading calls
-# below are already unconditional and only need this list to be non-empty to
-# take effect. Each platform's async_setup_entry receives the same
-# `entry: DwarfMiniConfigEntry` and reads the client via `entry.runtime_data`
-# (see below) - no hass.data lookup needed.
-PLATFORMS: list[str] = ["binary_sensor", "sensor"]
+# The full v1 platform list. Each platform's async_setup_entry receives the
+# same `entry: DwarfMiniConfigEntry` and reads the client via
+# `entry.runtime_data` (see below) - no hass.data lookup needed.
+PLATFORMS: list[str] = ["binary_sensor", "button", "sensor"]
 
 # Plain assignment (not a PEP 695 `type` statement) to match this codebase's
 # existing `from __future__ import annotations` + plain-alias conventions.

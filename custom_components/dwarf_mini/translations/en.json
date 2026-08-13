@@ -3,9 +3,18 @@
     "binary_sensor": {
       "connected": { "name": "Connected" }
     },
+    "button": {
+      "start_capture": { "name": "Start capture" },
+      "stop_capture": { "name": "Stop capture" }
+    },
     "sensor": {
       "battery": { "name": "Battery" },
       "capture_state": { "name": "Capture state" }
+    }
+  },
+  "exceptions": {
+    "capture_command_rejected": {
+      "message": "DWARF mini rejected the command (code={code})"
     }
   }
 }

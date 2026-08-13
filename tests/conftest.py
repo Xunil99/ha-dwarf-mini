@@ -189,10 +189,10 @@ async def fake_dwarf_server(aiohttp_client, socket_enabled):
 async def connected_client(hass, fake_dwarf_server):
     """A real DwarfMiniClient, connected, behind a real config entry.
 
-    Shared by test_binary_sensor.py and test_sensor.py: builds a
-    MockConfigEntry pointed at fake_dwarf_server's actual host/port, runs the
-    real async_setup_entry (so the platform entities under test are wired up
-    exactly as they are in production), and waits for the client's real
+    Shared by test_binary_sensor.py, test_sensor.py and test_button.py:
+    builds a MockConfigEntry pointed at fake_dwarf_server's actual host/port,
+    runs the real async_setup_entry (so the platform entities under test are
+    wired up exactly as they are in production), and waits for the client's real
     connect() - kicked off by run_forever() - to land before yielding the
     client for the test to push notifications through.
 

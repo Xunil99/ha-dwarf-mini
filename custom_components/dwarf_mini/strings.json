@@ -8,5 +8,10 @@
     },
     "error": { "cannot_connect": "Verbindung zur DWARF mini fehlgeschlagen" },
     "abort": { "already_configured": "Gerät ist bereits konfiguriert" }
+  },
+  "exceptions": {
+    "capture_command_rejected": {
+      "message": "DWARF mini hat den Befehl abgelehnt (code={code})"
+    }
   }
 }
