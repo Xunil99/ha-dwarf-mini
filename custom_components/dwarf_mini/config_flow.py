@@ -56,6 +56,18 @@ class DwarfMiniConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # "cannot_connect" instead of surfacing/logging them properly.
                 _LOGGER.debug("dwarf_mini: connection test failed", exc_info=True)
                 errors["base"] = "cannot_connect"
+                # Defense in depth: today's known failure paths (ws_connect()
+                # itself raising, or our own CONNECT_TIMEOUT firing before the
+                # websocket ever connects) never leave anything open here -
+                # client.py's connect() now swallows a cancellation that
+                # arrives after the websocket is already up (see its
+                # docstring), so this except branch is only ever reached
+                # while `client.connected` is still False. Closing
+                # unconditionally anyway means a future connect() regression
+                # can't quietly reintroduce a leaked websocket + reader task
+                # behind this branch. close() no-ops cleanly when there is
+                # nothing to close.
+                await client.close()
             else:
                 await client.close()
                 return self.async_create_entry(

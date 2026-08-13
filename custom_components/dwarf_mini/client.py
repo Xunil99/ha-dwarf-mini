@@ -116,7 +116,40 @@ class DwarfMiniClient:
         # `self._reader_task` are already set and the lock is free, so that
         # inner connect() call just hits the `if self.connected: return`
         # fast path above and send_request() can proceed normally.
-        await self._claim_master_lock()
+        try:
+            await self._claim_master_lock()
+        except asyncio.CancelledError:
+            # connect() itself got cancelled while the best-effort
+            # master-lock claim above was still in flight - e.g. config_flow's
+            # connectivity probe wraps this whole call in
+            # `asyncio.wait_for(client.connect(), timeout=CONNECT_TIMEOUT)`,
+            # and CONNECT_TIMEOUT (10s) is shorter than the claim's own
+            # send_request() timeout (15s), so a device that's slow/
+            # unresponsive to the claim (e.g. another client currently holds
+            # it) gets its claim cancelled by the outer timeout before it can
+            # finish. `_claim_master_lock()`'s own `except Exception` doesn't
+            # catch this - CancelledError is a BaseException, not an
+            # Exception, precisely so it isn't accidentally swallowed by
+            # ordinary error handling - so it has to be handled here instead.
+            #
+            # The websocket itself already connected successfully (`self._ws`
+            # and `self._reader_task` were set above, before this claim ever
+            # ran), so this is treated the same as any other best-effort
+            # master-lock failure: logged, not raised. Letting the
+            # CancelledError escape connect() here would make an outer
+            # `asyncio.wait_for` report this as connect() having failed
+            # (converting the cancellation into `asyncio.TimeoutError`) even
+            # though the connection is actually up - misreporting "cannot
+            # connect" to the config_flow user for a device that IS reachable,
+            # and worse, leaking the open websocket + reader task: the caller,
+            # believing connect() failed, has no reason to call close() on a
+            # client it thinks never connected.
+            # See test_connect_outer_cancellation_during_master_lock_claim_
+            # still_connects in test_client.py.
+            _LOGGER.debug(
+                "dwarf_mini: master-lock claim cancelled (likely an outer "
+                "timeout); websocket connection itself is still established"
+            )
 
     async def _claim_master_lock(self) -> None:
         """Best-effort: tell the device this client is now its active controller.

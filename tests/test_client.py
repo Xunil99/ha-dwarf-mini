@@ -374,3 +374,39 @@ async def test_connect_succeeds_even_if_master_lock_is_rejected(fake_dwarf_serve
 
     assert client.connected is True
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_connect_outer_cancellation_during_master_lock_claim_still_connects(
+    fake_dwarf_server,
+):
+    """Regression test: config_flow's connectivity probe wraps connect() in
+    `asyncio.wait_for(client.connect(), timeout=CONNECT_TIMEOUT)` with
+    CONNECT_TIMEOUT=10s, shorter than the master-lock claim's own internal
+    15s timeout. If the device is slow/unresponsive to the master-lock claim,
+    the outer wait_for fires first and cancels connect() while it is
+    suspended inside _claim_master_lock() - but by then self._ws and
+    self._reader_task are already set, so `connected` was left True while
+    connect() itself raised, leaking the open websocket + reader task and
+    making the caller believe the connection failed.
+
+    connect() must instead treat a cancellation arriving during the
+    best-effort master-lock claim the same as any other master-lock failure:
+    log it and still report success, since the underlying websocket really
+    did connect."""
+    from custom_components.dwarf_mini.const import CMD_SYSTEM_SET_MASTERLOCK, MODULE_SYSTEM
+
+    # No handler registered for the master-lock claim -> the fake server
+    # never answers it, so _claim_master_lock()'s own send_request() blocks
+    # until its 15s timeout - long enough that the short outer wait_for
+    # below always fires first.
+    del fake_dwarf_server.app["handlers"][(MODULE_SYSTEM, CMD_SYSTEM_SET_MASTERLOCK)]
+
+    client = DwarfMiniClient(session=fake_dwarf_server.session, ws_url=_ws_url(fake_dwarf_server))
+
+    # Must not raise, even though the master-lock claim never gets a
+    # response and would otherwise block for its own 15s timeout.
+    await asyncio.wait_for(client.connect(), timeout=0.3)
+
+    assert client.connected is True
+    await client.close()
