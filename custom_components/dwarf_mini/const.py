@@ -4,7 +4,9 @@ Module/message-type/command IDs are taken from DwarfLab's V3 websocket protocol 
 documented in dwarfAlp (https://github.com/acocalypso/dwarfAlp, GPLv3), file
 src/dwarf_alpaca/proto/protocol.proto. The OperationState values come from the same
 project's src/dwarf_alpaca/proto/notify.proto. MODULE_SYSTEM and
-CMD_SYSTEM_SET_MASTERLOCK also come from protocol.proto.
+CMD_SYSTEM_SET_MASTERLOCK also come from protocol.proto. The focus/GoTo/tracking
+constants added for phase 2 also come from protocol.proto and
+src/dwarf_alpaca/proto/astro.proto.
 """
 from __future__ import annotations
 
@@ -45,3 +47,22 @@ OPERATION_STATE_NAMES = {
     STATE_STOPPING: "stopping",
     STATE_STOPPED: "stopped",
 }
+
+# --- ModuleId (ergänzt) ---
+MODULE_FOCUS = 8
+
+# --- DwarfCMD (Fokus) ---
+CMD_FOCUS_START_ASTRO_AUTO_FOCUS = 15004
+CMD_NOTIFY_FOCUS = 15257
+CMD_V3_NOTIFY_AUTOFOCUS_STATE = 15278
+CMD_V3_NOTIFY_AUTOFOCUS_STATE_ALT = 15280
+
+# --- DwarfCMD (GoTo, One-Click) ---
+CMD_ASTRO_START_ONE_CLICK_GOTO_DSO = 11013
+CMD_ASTRO_START_ONE_CLICK_GOTO_SOLAR_SYSTEM = 11014  # unverified, see design doc
+CMD_ASTRO_STOP_ONE_CLICK_GOTO = 11015
+CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO = 15233
+
+# --- AutoFocus state (astro.proto comment: 1=running, 3=complete) ---
+AUTOFOCUS_STATE_RUNNING = 1
+AUTOFOCUS_STATE_COMPLETE = 3
