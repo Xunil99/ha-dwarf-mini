@@ -4,7 +4,12 @@ import asyncio
 import pytest
 
 from custom_components.dwarf_mini.client import DwarfMiniClient
-from custom_components.dwarf_mini.proto_messages import TYPE_REQUEST_RESPONSE, WsPacket
+from custom_components.dwarf_mini.proto_messages import (
+    TYPE_REQUEST_RESPONSE,
+    ComResponse,
+    ReqStopCaptureRawLiveStacking,
+    WsPacket,
+)
 
 
 def _ws_url(server) -> str:
@@ -91,3 +96,19 @@ async def test_send_request_fails_fast_on_clean_disconnect(fake_dwarf_server):
     elapsed = loop.time() - start
 
     assert elapsed < 1.0, f"send_request took {elapsed:.2f}s, should fail fast on disconnect"
+
+
+@pytest.mark.asyncio
+async def test_send_request_gets_response(fake_dwarf_server):
+    fake_dwarf_server.app["handlers"][(3, 11006)] = (
+        lambda data: ComResponse(code=0).SerializeToString()
+    )
+    client = DwarfMiniClient(
+        session=fake_dwarf_server.session,
+        ws_url=_ws_url(fake_dwarf_server),
+    )
+    response = await client.send_request(
+        3, 11006, ReqStopCaptureRawLiveStacking(), ComResponse
+    )
+    assert response.code == 0
+    await client.close()
