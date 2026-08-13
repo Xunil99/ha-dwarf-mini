@@ -94,3 +94,10 @@ GOTO_SOLAR_SYSTEM_TARGETS = {
     "Uranus (experimentell)": 6,
     "Neptun (experimentell)": 7,
 }
+
+# --- Temporary: payload format investigation (Phase 2 Task 9/10) ---
+# Notify codes exist in the protocol but no known reference implementation
+# decodes their payload. Debug-logged raw bytes below; remove once Task 10
+# implements real sensors from the discovered format.
+CMD_NOTIFY_SDCARD_INFO = 15203
+CMD_NOTIFY_CHARGE = 15202

@@ -612,3 +612,52 @@ async def test_connect_outer_cancellation_during_master_lock_claim_still_connect
 
     assert client.connected is True
     await client.close()
+
+
+# --- Temporary: payload format investigation (Phase 2 Task 9/10) ---
+# These tests just prove the diagnostic raw-payload logging fires; remove
+# alongside the logging branches once Task 10 implements real sensors.
+
+
+@pytest.mark.asyncio
+async def test_sdcard_info_notification_logs_raw_payload(fake_dwarf_server, caplog):
+    from custom_components.dwarf_mini.const import CMD_NOTIFY_SDCARD_INFO, MODULE_NOTIFY
+
+    client = DwarfMiniClient(session=fake_dwarf_server.session, ws_url=_ws_url(fake_dwarf_server))
+    await client.connect()
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_SDCARD_INFO, type=2,
+        data=b"\x01\x02\x03\x04",
+    )
+    with caplog.at_level(logging.WARNING, logger="custom_components.dwarf_mini.client"):
+        await server_ws.send_bytes(notify.SerializeToString())
+        await asyncio.sleep(0.05)
+
+    assert "RAW SDCARD_INFO payload" in caplog.text
+    assert "01020304" in caplog.text
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_charge_notification_logs_raw_payload(fake_dwarf_server, caplog):
+    from custom_components.dwarf_mini.const import CMD_NOTIFY_CHARGE, MODULE_NOTIFY
+
+    client = DwarfMiniClient(session=fake_dwarf_server.session, ws_url=_ws_url(fake_dwarf_server))
+    await client.connect()
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_CHARGE, type=2,
+        data=b"\xaa\xbb\xcc",
+    )
+    with caplog.at_level(logging.WARNING, logger="custom_components.dwarf_mini.client"):
+        await server_ws.send_bytes(notify.SerializeToString())
+        await asyncio.sleep(0.05)
+
+    assert "RAW CHARGE payload" in caplog.text
+    assert "aabbcc" in caplog.text
+    await client.close()

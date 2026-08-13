@@ -20,9 +20,11 @@ from google.protobuf.message import DecodeError, Message
 from .const import (
     AUTOFOCUS_STATE_COMPLETE,
     AUTOFOCUS_STATE_RUNNING,
+    CMD_NOTIFY_CHARGE,
     CMD_NOTIFY_ELE,
     CMD_NOTIFY_FOCUS,
     CMD_NOTIFY_PROGRASS_CAPTURE_RAW_LIVE_STACKING,
+    CMD_NOTIFY_SDCARD_INFO,
     CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO,
     CMD_NOTIFY_STATE_CAPTURE_RAW_LIVE_STACKING,
     CMD_SYSTEM_SET_MASTERLOCK,
@@ -451,6 +453,21 @@ class DwarfMiniClient:
             self.state["goto_target_name"] = value.goto_state.target_name or None
             self.state["tracking"] = value.tracking_state.state == STATE_RUNNING
             self._notify_listeners()
+        # --- Temporary: payload format investigation (Phase 2 Task 9/10) ---
+        # Pure diagnostics: no known payload decoder exists yet, so just log
+        # the raw bytes at WARNING level (visible without raising the
+        # integration's log level) and don't touch state/listeners. Remove
+        # once Task 10 implements real sensors from the discovered format.
+        elif packet.cmd == CMD_NOTIFY_SDCARD_INFO:
+            _LOGGER.warning(
+                "dwarf_mini: RAW SDCARD_INFO payload (len=%d): %s",
+                len(packet.data), packet.data.hex(),
+            )
+        elif packet.cmd == CMD_NOTIFY_CHARGE:
+            _LOGGER.warning(
+                "dwarf_mini: RAW CHARGE payload (len=%d): %s",
+                len(packet.data), packet.data.hex(),
+            )
 
     async def run_forever(self) -> None:
         """Keep the connection alive, reconnecting with exponential backoff.
