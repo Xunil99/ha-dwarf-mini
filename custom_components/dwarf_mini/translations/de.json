@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "DWARF mini verbinden",
+        "data": { "host": "IP-Adresse oder Hostname" }
+      }
+    },
+    "error": { "cannot_connect": "Verbindung zur DWARF mini fehlgeschlagen" },
+    "abort": { "already_configured": "Gerät ist bereits konfiguriert" }
+  },
+  "exceptions": {
+    "capture_command_rejected": {
+      "message": "DWARF mini hat den Befehl abgelehnt (code={code})"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": { "name": "Verbunden" }
+    },
+    "sensor": {
+      "battery": { "name": "Akku" },
+      "capture_state": { "name": "Aufnahmestatus" }
+    },
+    "button": {
+      "start_capture": { "name": "Aufnahme starten" },
+      "stop_capture": { "name": "Aufnahme stoppen" }
+    }
+  }
+}
