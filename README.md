@@ -15,7 +15,7 @@ Home Assistant Integration für das [DwarfLab DWARF mini](https://www.dwarflab.c
 - `button` Aufnahme starten / stoppen
 - `button` GoTo stoppen
 - `button` Autofokus
-- `camera` Live-View Tele / Weitwinkel (RTSP über HAs eingebaute `stream`-Komponente)
+- `camera` Live-View Tele / Weitwinkel (MJPEG über HTTP, via HAs eingebaute `stream`-Komponente)
 - `select` GoTo-Ziel (fest hinterlegte DSOs sowie Sonne/Mond/Planeten über den
   experimentellen Solar-System-Pfad, siehe unten)
 - Dienst `dwarf_mini.goto_coordinates` — GoTo zu einem beliebigen RA/Dec-Ziel
