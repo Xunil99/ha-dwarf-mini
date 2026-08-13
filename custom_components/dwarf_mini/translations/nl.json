@@ -16,7 +16,8 @@
   },
   "entity": {
     "binary_sensor": {
-      "connected": { "name": "Verbonden" }
+      "connected": { "name": "Verbonden" },
+      "tracking": { "name": "Tracking" }
     },
     "camera": {
       "tele": { "name": "Tele" },

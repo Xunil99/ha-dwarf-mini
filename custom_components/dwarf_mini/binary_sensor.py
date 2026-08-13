@@ -20,7 +20,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     client: DwarfMiniClient = entry.runtime_data
-    async_add_entities([DwarfMiniConnectedSensor(client, entry)])
+    async_add_entities(
+        [DwarfMiniConnectedSensor(client, entry), DwarfMiniTrackingSensor(client, entry)]
+    )
 
 
 class DwarfMiniConnectedSensor(BinarySensorEntity):
@@ -39,6 +41,26 @@ class DwarfMiniConnectedSensor(BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         return self._client.connected
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(self._client.add_listener(self.async_write_ha_state))
+
+
+class DwarfMiniTrackingSensor(BinarySensorEntity):
+    _attr_has_entity_name = True
+    _attr_translation_key = "tracking"
+    _attr_should_poll = False
+
+    def __init__(self, client: DwarfMiniClient, entry: DwarfMiniConfigEntry) -> None:
+        self._client = client
+        self._attr_unique_id = f"{entry.entry_id}_tracking"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)}, name="DWARF mini"
+        )
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self._client.state.get("tracking"))
 
     async def async_added_to_hass(self) -> None:
         self.async_on_remove(self._client.add_listener(self.async_write_ha_state))
