@@ -305,7 +305,16 @@ class DwarfMiniClient:
                         "dwarf_mini: failed to decode notification payload (cmd=%s)", packet.cmd
                     )
                     return
-            self.state["capture_state"] = OPERATION_STATE_NAMES.get(value.value, "unknown")
+            # "unrecognized", not "unknown": HA's state machine already uses
+            # "unknown" as its own reserved state for "no value received
+            # yet" (see DwarfMiniCaptureStateSensor.native_value returning
+            # None before the first notification). Falling back to that same
+            # string here would make a genuinely-unrecognized device value
+            # indistinguishable from cold start instead of standing out as
+            # an anomaly.
+            self.state["capture_state"] = OPERATION_STATE_NAMES.get(
+                value.value, "unrecognized"
+            )
             self._notify_listeners()
         elif packet.cmd == CMD_NOTIFY_PROGRASS_CAPTURE_RAW_LIVE_STACKING:
             progress = ResNotifyProgressCaptureRawLiveStacking()

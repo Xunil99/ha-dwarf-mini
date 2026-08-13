@@ -2,6 +2,10 @@
   "entity": {
     "binary_sensor": {
       "connected": { "name": "Connected" }
+    },
+    "sensor": {
+      "battery": { "name": "Battery" },
+      "capture_state": { "name": "Capture state" }
     }
   }
 }

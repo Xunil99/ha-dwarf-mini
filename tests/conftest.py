@@ -6,7 +6,7 @@ import pytest
 from aiohttp import web
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.dwarf_mini.const import DOMAIN
+from custom_components.dwarf_mini.const import CONF_HOST, CONF_PORT, DOMAIN
 
 # pytest-homeassistant-custom-component (registered as a pytest plugin via
 # its entry point) restricts component loading to core components by
@@ -183,3 +183,50 @@ async def fake_dwarf_server(aiohttp_client, socket_enabled):
     app.router.add_get("/", ws_handler)
     client = await aiohttp_client(app)
     yield client
+
+
+@pytest.fixture
+async def connected_client(hass, fake_dwarf_server):
+    """A real DwarfMiniClient, connected, behind a real config entry.
+
+    Shared by test_binary_sensor.py and test_sensor.py: builds a
+    MockConfigEntry pointed at fake_dwarf_server's actual host/port, runs the
+    real async_setup_entry (so the platform entities under test are wired up
+    exactly as they are in production), and waits for the client's real
+    connect() - kicked off by run_forever() - to land before yielding the
+    client for the test to push notifications through.
+
+    The `finally` around the yield is not optional: without it, a test that
+    fails/asserts before reaching its own cleanup leaves the entry's
+    run_forever() background task alive, still holding the fake_dwarf_server
+    connection open. That task then has to run through its full
+    reconnect-backoff chain during the hass fixture's own teardown before the
+    test session can proceed - confirmed empirically to take up to ~121s per
+    stuck test, turning one assertion failure into a near-total suite hang.
+    Closing here unconditionally keeps that guarantee in one place instead of
+    requiring every test that uses this fixture to remember its own
+    try/finally.
+    """
+    url = fake_dwarf_server.make_url("/")
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={CONF_HOST: url.host, CONF_PORT: url.port}
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    dwarf_client = entry.runtime_data
+    for _ in range(100):
+        if dwarf_client.connected:
+            break
+        await asyncio.sleep(0.01)
+    assert dwarf_client.connected is True
+
+    try:
+        yield dwarf_client
+    finally:
+        # Idempotent even if the test already called close() itself (e.g.
+        # test_binary_sensor.py's disconnect assertion) - DwarfMiniClient.close()
+        # no-ops cleanly on an already-closed client.
+        await dwarf_client.close()
