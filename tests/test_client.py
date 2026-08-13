@@ -206,6 +206,61 @@ async def test_close_during_backoff_wait_ends_run_forever_promptly(fake_dwarf_se
     assert elapsed < 0.15, f"run_forever() took {elapsed:.3f}s to end after close()"
 
 
+@pytest.mark.asyncio
+async def test_close_while_connected_does_not_send_stale_connected_notification(
+    fake_dwarf_server,
+):
+    """Regression test for the binary_sensor-review close()/run_forever()
+    ordering fix: calling close() directly while run_forever() is running as
+    a separate task and both are awaiting the same `_reader_task` must not
+    let a listener observe a stale `connected is True` after close() starts.
+
+    Before the fix, close() cancelled/awaited `_reader_task` *before*
+    clearing `_ws`. Since run_forever() is also awaiting that same task and
+    was registered as an awaiter first (it started awaiting earlier), its
+    post-disconnect `_notify_listeners()` call could run before close()
+    reached the `_ws = None` line, so listeners momentarily saw `connected`
+    read True again right after the "disconnect" notification - with no
+    later notification ever correcting it, since close() itself doesn't call
+    `_notify_listeners()` and run_forever() only fires it once per iteration.
+
+    Not reachable through any real call site today (async_unload_entry only
+    calls close() after async_unload_platforms has already removed the
+    listener; config_flow's probe client never registers one) - this guards
+    the invariant directly since a future caller (e.g. a reconnect service
+    or a reconfigure flow) could plausibly call close() on a client that
+    still has listeners attached.
+    """
+    client = DwarfMiniClient(
+        session=fake_dwarf_server.session,
+        ws_url=_ws_url(fake_dwarf_server),
+    )
+
+    events = []
+    client.add_listener(lambda: events.append(client.connected))
+
+    task = asyncio.create_task(client.run_forever())
+    for _ in range(100):
+        if events:
+            break
+        await asyncio.sleep(0.01)
+    assert events == [True]
+
+    await client.close()
+    await asyncio.wait_for(task, timeout=1.0)
+
+    assert client.connected is False
+    assert False in events, f"expected a disconnect notification, got {events}"
+    assert events[-1] is False, (
+        f"listeners must not be left with a stale 'connected' notification "
+        f"after close(), got {events}"
+    )
+    assert True not in events[1:], (
+        f"no notification after the initial connect should ever report "
+        f"connected again once close() has been called, got {events}"
+    )
+
+
 def test_notify_listeners_isolates_callback_errors():
     """Regression test for the review-round-3 important bug: one listener
     raising must not stop the remaining listeners from being notified."""

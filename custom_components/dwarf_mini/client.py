@@ -109,6 +109,35 @@ class DwarfMiniClient:
         # connection this close() is tearing down. See run_forever().
         self._closing_event.set()
         async with self._lock:
+            # Close (and null out) `_ws` *before* cancelling/awaiting the
+            # reader task, not after: if run_forever() is running as a
+            # separate task and also awaiting this same `_reader_task`, both
+            # awaiters' resumptions get scheduled together once it's done -
+            # run_forever()'s often runs first, since it started awaiting
+            # earlier and so was registered as a callback first. If `_ws`
+            # were still non-None at that point, `connected` would briefly
+            # read True again from inside run_forever()'s post-disconnect
+            # `_notify_listeners()` call, handing any listener a stale
+            # "still connected" notification with no follow-up correction.
+            # Clearing `_ws` first makes `connected` correctly read False no
+            # matter which awaiter's continuation the event loop happens to
+            # run first. See test_close_while_connected_does_not_send_stale_
+            # connected_notification in test_client.py for the exact race.
+            #
+            # Not reachable through any call site in this codebase today:
+            # async_unload_entry() only calls close() after
+            # async_unload_platforms() has already torn down the
+            # binary_sensor entity (and with it, its listener), and
+            # config_flow.py's probe client never registers a listener at
+            # all. This is future-proofing rather than a fix for an
+            # observed production bug - kept because a later caller (e.g. a
+            # reconnect service, or a reconfigure flow reusing a live
+            # client) could plausibly call close() while listeners are still
+            # attached, and this ordering is the correct/robust one
+            # regardless.
+            if self._ws:
+                await self._ws.close()
+                self._ws = None
             if self._reader_task:
                 self._reader_task.cancel()
                 # The reader task may end with CancelledError (the common case,
@@ -121,9 +150,6 @@ class DwarfMiniClient:
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await self._reader_task
                 self._reader_task = None
-            if self._ws:
-                await self._ws.close()
-                self._ws = None
             self._flush_pending(ConnectionError("client closed"))
 
     def _on_reader_task_done(self, task: "asyncio.Task[None]") -> None:
