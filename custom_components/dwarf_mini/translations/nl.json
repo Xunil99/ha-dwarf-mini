@@ -24,7 +24,9 @@
     },
     "sensor": {
       "battery": { "name": "Batterij" },
-      "capture_state": { "name": "Opnamestatus" }
+      "capture_state": { "name": "Opnamestatus" },
+      "focus_position": { "name": "Focuspositie" },
+      "goto_state": { "name": "GoTo-status" }
     },
     "button": {
       "start_capture": { "name": "Opname starten" },

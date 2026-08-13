@@ -24,7 +24,9 @@
     },
     "sensor": {
       "battery": { "name": "Battery" },
-      "capture_state": { "name": "Capture state" }
+      "capture_state": { "name": "Capture state" },
+      "focus_position": { "name": "Focus position" },
+      "goto_state": { "name": "GoTo state" }
     },
     "button": {
       "start_capture": { "name": "Start capture" },
