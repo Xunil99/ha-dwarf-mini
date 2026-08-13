@@ -5,14 +5,14 @@ from custom_components.dwarf_mini.camera import DwarfMiniCamera
 
 @pytest.mark.asyncio
 async def test_tele_camera_stream_source(mock_config_entry):
-    camera = DwarfMiniCamera(mock_config_entry, "tele", "ch0", "192.168.2.50")
-    assert await camera.stream_source() == "rtsp://192.168.2.50:554/ch0/stream0"
+    camera = DwarfMiniCamera(mock_config_entry, "tele", "mainstream", "192.168.2.50")
+    assert await camera.stream_source() == "http://192.168.2.50:8092/mainstream"
 
 
 @pytest.mark.asyncio
 async def test_wide_camera_stream_source(mock_config_entry):
-    camera = DwarfMiniCamera(mock_config_entry, "wide", "ch1", "192.168.2.50")
-    assert await camera.stream_source() == "rtsp://192.168.2.50:554/ch1/stream0"
+    camera = DwarfMiniCamera(mock_config_entry, "wide", "thirdstream", "192.168.2.50")
+    assert await camera.stream_source() == "http://192.168.2.50:8092/thirdstream"
 
 
 @pytest.mark.asyncio
