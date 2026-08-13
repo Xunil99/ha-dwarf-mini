@@ -127,6 +127,208 @@ async def test_battery_notification_updates_state(fake_dwarf_server):
 
 
 @pytest.mark.asyncio
+async def test_focus_notification_updates_state(fake_dwarf_server):
+    from custom_components.dwarf_mini.const import CMD_NOTIFY_FOCUS, MODULE_NOTIFY
+    from custom_components.dwarf_mini.proto_messages import ResNotifyFocus
+
+    client = DwarfMiniClient(
+        session=fake_dwarf_server.session,
+        ws_url=_ws_url(fake_dwarf_server),
+    )
+    await client.connect()
+
+    updates = []
+    client.add_listener(lambda: updates.append(dict(client.state)))
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_FOCUS, type=2,
+        data=ResNotifyFocus(focus=1234).SerializeToString(),
+    )
+    await server_ws.send_bytes(notify.SerializeToString())
+    await asyncio.sleep(0.05)
+
+    assert client.state["focus_position"] == 1234
+    assert updates and updates[-1]["focus_position"] == 1234
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_autofocus_state_notification_updates_state(fake_dwarf_server):
+    from custom_components.dwarf_mini.const import (
+        CMD_V3_NOTIFY_AUTOFOCUS_STATE,
+        MODULE_NOTIFY,
+    )
+    from custom_components.dwarf_mini.proto_messages import V3ResNotifyAutoFocusState
+
+    client = DwarfMiniClient(
+        session=fake_dwarf_server.session,
+        ws_url=_ws_url(fake_dwarf_server),
+    )
+    await client.connect()
+
+    updates = []
+    client.add_listener(lambda: updates.append(dict(client.state)))
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_V3_NOTIFY_AUTOFOCUS_STATE, type=2,
+        data=V3ResNotifyAutoFocusState(state=3).SerializeToString(),
+    )
+    await server_ws.send_bytes(notify.SerializeToString())
+    await asyncio.sleep(0.05)
+
+    assert client.state["autofocus_state"] == "complete"
+    assert updates and updates[-1]["autofocus_state"] == "complete"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_autofocus_state_notification_unrecognized_value(fake_dwarf_server):
+    """An autofocus-state value the device sends that we don't have a mapping
+    for must surface as "unrecognized", not silently pass through the raw int
+    or fall back to None (which would be indistinguishable from cold start)."""
+    from custom_components.dwarf_mini.const import (
+        CMD_V3_NOTIFY_AUTOFOCUS_STATE,
+        MODULE_NOTIFY,
+    )
+    from custom_components.dwarf_mini.proto_messages import V3ResNotifyAutoFocusState
+
+    client = DwarfMiniClient(
+        session=fake_dwarf_server.session,
+        ws_url=_ws_url(fake_dwarf_server),
+    )
+    await client.connect()
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_V3_NOTIFY_AUTOFOCUS_STATE, type=2,
+        data=V3ResNotifyAutoFocusState(state=99).SerializeToString(),
+    )
+    await server_ws.send_bytes(notify.SerializeToString())
+    await asyncio.sleep(0.05)
+
+    assert client.state["autofocus_state"] == "unrecognized"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_goto_notification_updates_state(fake_dwarf_server):
+    from custom_components.dwarf_mini.const import (
+        CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO,
+        MODULE_NOTIFY,
+        OPERATION_STATE_NAMES,
+        STATE_RUNNING,
+    )
+    from custom_components.dwarf_mini.proto_messages import (
+        OneClickGotoPhaseState,
+        ResNotifyOneClickGotoState,
+    )
+
+    client = DwarfMiniClient(
+        session=fake_dwarf_server.session,
+        ws_url=_ws_url(fake_dwarf_server),
+    )
+    await client.connect()
+
+    updates = []
+    client.add_listener(lambda: updates.append(dict(client.state)))
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO, type=2,
+        data=ResNotifyOneClickGotoState(
+            state=STATE_RUNNING,
+            goto_state=OneClickGotoPhaseState(target_name="M31"),
+            tracking_state=OneClickGotoPhaseState(state=STATE_RUNNING),
+        ).SerializeToString(),
+    )
+    await server_ws.send_bytes(notify.SerializeToString())
+    await asyncio.sleep(0.05)
+
+    assert client.state["goto_state"] == OPERATION_STATE_NAMES[STATE_RUNNING]
+    assert client.state["goto_target_name"] == "M31"
+    assert client.state["tracking"] is True
+    assert updates and updates[-1]["tracking"] is True
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_goto_notification_tracking_false_when_not_running(fake_dwarf_server):
+    from custom_components.dwarf_mini.const import (
+        CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO,
+        MODULE_NOTIFY,
+        STATE_STOPPED,
+    )
+    from custom_components.dwarf_mini.proto_messages import (
+        OneClickGotoPhaseState,
+        ResNotifyOneClickGotoState,
+    )
+
+    client = DwarfMiniClient(
+        session=fake_dwarf_server.session,
+        ws_url=_ws_url(fake_dwarf_server),
+    )
+    await client.connect()
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO, type=2,
+        data=ResNotifyOneClickGotoState(
+            state=STATE_STOPPED,
+            goto_state=OneClickGotoPhaseState(target_name="M42"),
+            tracking_state=OneClickGotoPhaseState(state=STATE_STOPPED),
+        ).SerializeToString(),
+    )
+    await server_ws.send_bytes(notify.SerializeToString())
+    await asyncio.sleep(0.05)
+
+    assert client.state["tracking"] is False
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_malformed_goto_notification_does_not_partially_update_state(
+    fake_dwarf_server, caplog
+):
+    """Regression-style test matching the existing malformed-payload coverage
+    for the battery notification: a corrupt goto-state payload must be
+    logged and dropped, not crash the reader loop or leave partial/garbage
+    state (state has three keys written together in this branch)."""
+    from custom_components.dwarf_mini.const import (
+        CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO,
+        MODULE_NOTIFY,
+    )
+
+    client = DwarfMiniClient(
+        session=fake_dwarf_server.session,
+        ws_url=_ws_url(fake_dwarf_server),
+    )
+    await client.connect()
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO, type=2,
+        data=b"\x08",  # truncated varint field -> DecodeError on parse
+    )
+    with caplog.at_level(logging.DEBUG, logger="custom_components.dwarf_mini.client"):
+        await server_ws.send_bytes(notify.SerializeToString())
+        await asyncio.sleep(0.05)
+
+    assert client.state["goto_state"] is None
+    assert client.state["goto_target_name"] is None
+    assert client.state["tracking"] is False
+    assert client.connected is True
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_run_forever_notifies_listeners_on_disconnect_and_reconnect(fake_dwarf_server):
     """Regression test for the critical review-round-3 bug: run_forever()
     must call _notify_listeners() on connectivity changes, not just on
@@ -409,4 +611,53 @@ async def test_connect_outer_cancellation_during_master_lock_claim_still_connect
     await asyncio.wait_for(client.connect(), timeout=0.3)
 
     assert client.connected is True
+    await client.close()
+
+
+# --- Temporary: payload format investigation (Phase 2 Task 9/10) ---
+# These tests just prove the diagnostic raw-payload logging fires; remove
+# alongside the logging branches once Task 10 implements real sensors.
+
+
+@pytest.mark.asyncio
+async def test_sdcard_info_notification_logs_raw_payload(fake_dwarf_server, caplog):
+    from custom_components.dwarf_mini.const import CMD_NOTIFY_SDCARD_INFO, MODULE_NOTIFY
+
+    client = DwarfMiniClient(session=fake_dwarf_server.session, ws_url=_ws_url(fake_dwarf_server))
+    await client.connect()
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_SDCARD_INFO, type=2,
+        data=b"\x01\x02\x03\x04",
+    )
+    with caplog.at_level(logging.WARNING, logger="custom_components.dwarf_mini.client"):
+        await server_ws.send_bytes(notify.SerializeToString())
+        await asyncio.sleep(0.05)
+
+    assert "RAW SDCARD_INFO payload" in caplog.text
+    assert "01020304" in caplog.text
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_charge_notification_logs_raw_payload(fake_dwarf_server, caplog):
+    from custom_components.dwarf_mini.const import CMD_NOTIFY_CHARGE, MODULE_NOTIFY
+
+    client = DwarfMiniClient(session=fake_dwarf_server.session, ws_url=_ws_url(fake_dwarf_server))
+    await client.connect()
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+    notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_CHARGE, type=2,
+        data=b"\xaa\xbb\xcc",
+    )
+    with caplog.at_level(logging.WARNING, logger="custom_components.dwarf_mini.client"):
+        await server_ws.send_bytes(notify.SerializeToString())
+        await asyncio.sleep(0.05)
+
+    assert "RAW CHARGE payload" in caplog.text
+    assert "aabbcc" in caplog.text
     await client.close()

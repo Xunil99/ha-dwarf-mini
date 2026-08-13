@@ -16,15 +16,51 @@
   },
   "entity": {
     "binary_sensor": {
-      "connected": { "name": "Verbonden" }
+      "connected": { "name": "Verbonden" },
+      "tracking": { "name": "Tracking" }
+    },
+    "camera": {
+      "tele": { "name": "Tele" },
+      "wide": { "name": "Groothoek" }
     },
     "sensor": {
       "battery": { "name": "Batterij" },
-      "capture_state": { "name": "Opnamestatus" }
+      "capture_state": { "name": "Opnamestatus" },
+      "focus_position": { "name": "Focuspositie" },
+      "goto_state": { "name": "GoTo-status" }
     },
     "button": {
       "start_capture": { "name": "Opname starten" },
-      "stop_capture": { "name": "Opname stoppen" }
+      "stop_capture": { "name": "Opname stoppen" },
+      "stop_goto": { "name": "GoTo stoppen" },
+      "autofocus": { "name": "Autofocus" }
+    },
+    "select": {
+      "goto_target": { "name": "GoTo-doel" }
+    }
+  },
+  "services": {
+    "goto_coordinates": {
+      "name": "GoTo-coördinaten",
+      "description": "Beweegt naar een willekeurig RA/Dec-doel dat niet in de GoTo-doellijst staat.",
+      "fields": {
+        "device_id": {
+          "name": "Apparaat",
+          "description": "De DWARF mini waarnaar de GoTo wordt gestuurd."
+        },
+        "ra_hours": {
+          "name": "Rechte klimming",
+          "description": "Rechte klimming van het doel, in uren."
+        },
+        "dec_degrees": {
+          "name": "Declinatie",
+          "description": "Declinatie van het doel, in graden."
+        },
+        "target_name": {
+          "name": "Doelnaam",
+          "description": "Optioneel label voor het doel. Standaard \"RA <uren>h Dec <graden>°\" indien niet opgegeven."
+        }
+      }
     }
   }
 }

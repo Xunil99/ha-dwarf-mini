@@ -16,15 +16,51 @@
   },
   "entity": {
     "binary_sensor": {
-      "connected": { "name": "Verbunden" }
+      "connected": { "name": "Verbunden" },
+      "tracking": { "name": "Tracking" }
+    },
+    "camera": {
+      "tele": { "name": "Tele" },
+      "wide": { "name": "Weitwinkel" }
     },
     "sensor": {
       "battery": { "name": "Akku" },
-      "capture_state": { "name": "Aufnahmestatus" }
+      "capture_state": { "name": "Aufnahmestatus" },
+      "focus_position": { "name": "Fokusposition" },
+      "goto_state": { "name": "GoTo-Status" }
     },
     "button": {
       "start_capture": { "name": "Aufnahme starten" },
-      "stop_capture": { "name": "Aufnahme stoppen" }
+      "stop_capture": { "name": "Aufnahme stoppen" },
+      "stop_goto": { "name": "GoTo stoppen" },
+      "autofocus": { "name": "Autofokus" }
+    },
+    "select": {
+      "goto_target": { "name": "GoTo-Ziel" }
+    }
+  },
+  "services": {
+    "goto_coordinates": {
+      "name": "GoTo-Koordinaten",
+      "description": "Fährt ein beliebiges RA/Dec-Ziel an, das nicht in der GoTo-Zielliste enthalten ist.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Die DWARF mini, an die das GoTo gesendet wird."
+        },
+        "ra_hours": {
+          "name": "Rektaszension",
+          "description": "Rektaszension des Ziels in Stunden."
+        },
+        "dec_degrees": {
+          "name": "Deklination",
+          "description": "Deklination des Ziels in Grad."
+        },
+        "target_name": {
+          "name": "Zielname",
+          "description": "Optionale Bezeichnung für das Ziel. Ohne Angabe Standard \"RA <Stunden>h Dec <Grad>°\"."
+        }
+      }
     }
   }
 }

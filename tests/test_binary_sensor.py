@@ -1,5 +1,19 @@
 # tests/test_binary_sensor.py
+import asyncio
+
 import pytest
+
+from custom_components.dwarf_mini.const import (
+    CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO,
+    MODULE_NOTIFY,
+    STATE_RUNNING,
+    STATE_STOPPED,
+)
+from custom_components.dwarf_mini.proto_messages import (
+    OneClickGotoPhaseState,
+    ResNotifyOneClickGotoState,
+    WsPacket,
+)
 
 
 @pytest.mark.asyncio
@@ -26,4 +40,52 @@ async def test_connected_binary_sensor(hass, connected_client):
     # (which is what flips the entity's state) before we assert on it.
     await hass.async_block_till_done(wait_background_tasks=True)
     state = hass.states.get("binary_sensor.dwarf_mini_connected")
+    assert state.state == "off"
+
+
+@pytest.mark.asyncio
+async def test_tracking_binary_sensor(hass, fake_dwarf_server, connected_client):
+    """Tracking notification through the real entity.
+
+    Unlike sensor.py's "unknown" cold-start convention (native_value is
+    None until the first notification arrives), client.state["tracking"]
+    defaults to False (see client.py), not None - so is_on returns False,
+    and the binary_sensor's own cold-start state is HA's "off", never
+    "unknown". BinarySensorEntity has no not-yet-known state unless is_on
+    itself returns None.
+    """
+    state = hass.states.get("binary_sensor.dwarf_mini_tracking")
+    assert state is not None
+    assert state.state == "off"
+
+    server_ws = fake_dwarf_server.app["clients"][0]
+
+    running_notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO, type=2,
+        data=ResNotifyOneClickGotoState(
+            tracking_state=OneClickGotoPhaseState(state=STATE_RUNNING),
+        ).SerializeToString(),
+    )
+    await server_ws.send_bytes(running_notify.SerializeToString())
+    await asyncio.sleep(0.05)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.dwarf_mini_tracking")
+    assert state is not None
+    assert state.state == "on"
+
+    stopped_notify = WsPacket(
+        major_version=1, minor_version=2, device_id=1,
+        module_id=MODULE_NOTIFY, cmd=CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO, type=2,
+        data=ResNotifyOneClickGotoState(
+            tracking_state=OneClickGotoPhaseState(state=STATE_STOPPED),
+        ).SerializeToString(),
+    )
+    await server_ws.send_bytes(stopped_notify.SerializeToString())
+    await asyncio.sleep(0.05)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.dwarf_mini_tracking")
+    assert state is not None
     assert state.state == "off"

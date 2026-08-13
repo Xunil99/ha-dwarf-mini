@@ -18,21 +18,33 @@ import aiohttp
 from google.protobuf.message import DecodeError, Message
 
 from .const import (
+    AUTOFOCUS_STATE_COMPLETE,
+    AUTOFOCUS_STATE_RUNNING,
+    CMD_NOTIFY_CHARGE,
     CMD_NOTIFY_ELE,
+    CMD_NOTIFY_FOCUS,
     CMD_NOTIFY_PROGRASS_CAPTURE_RAW_LIVE_STACKING,
+    CMD_NOTIFY_SDCARD_INFO,
+    CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO,
     CMD_NOTIFY_STATE_CAPTURE_RAW_LIVE_STACKING,
     CMD_SYSTEM_SET_MASTERLOCK,
+    CMD_V3_NOTIFY_AUTOFOCUS_STATE,
+    CMD_V3_NOTIFY_AUTOFOCUS_STATE_ALT,
     MODULE_SYSTEM,
     OPERATION_STATE_NAMES,
+    STATE_RUNNING,
 )
 from .proto_messages import (
     ComResponse,
     ComResWithInt,
     ReqsetMasterLock,
+    ResNotifyFocus,
+    ResNotifyOneClickGotoState,
     ResNotifyProgressCaptureRawLiveStacking,
     TYPE_NOTIFICATION,
     TYPE_REQUEST,
     TYPE_REQUEST_RESPONSE,
+    V3ResNotifyAutoFocusState,
     WsPacket,
 )
 
@@ -86,6 +98,11 @@ class DwarfMiniClient:
             "progress_current": None,
             "progress_total": None,
             "progress_stacked": None,
+            "focus_position": None,
+            "autofocus_state": None,        # "running" / "complete" / "unrecognized"
+            "goto_state": None,              # OPERATION_STATE_NAMES-style value
+            "goto_target_name": None,
+            "tracking": False,
         }
         self.register_notification_handler(self._handle_notification)
 
@@ -404,6 +421,53 @@ class DwarfMiniClient:
             self.state["progress_total"] = progress.total_count
             self.state["progress_stacked"] = progress.stacked_count
             self._notify_listeners()
+        elif packet.cmd == CMD_NOTIFY_FOCUS:
+            try:
+                value = ResNotifyFocus()
+                value.ParseFromString(packet.data)
+            except DecodeError:
+                _LOGGER.debug("dwarf_mini: failed to decode focus notification")
+                return
+            self.state["focus_position"] = value.focus
+            self._notify_listeners()
+        elif packet.cmd in (CMD_V3_NOTIFY_AUTOFOCUS_STATE, CMD_V3_NOTIFY_AUTOFOCUS_STATE_ALT):
+            try:
+                value = V3ResNotifyAutoFocusState()
+                value.ParseFromString(packet.data)
+            except DecodeError:
+                _LOGGER.debug("dwarf_mini: failed to decode autofocus-state notification")
+                return
+            self.state["autofocus_state"] = {
+                AUTOFOCUS_STATE_RUNNING: "running",
+                AUTOFOCUS_STATE_COMPLETE: "complete",
+            }.get(value.state, "unrecognized")
+            self._notify_listeners()
+        elif packet.cmd == CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO:
+            try:
+                value = ResNotifyOneClickGotoState()
+                value.ParseFromString(packet.data)
+            except DecodeError:
+                _LOGGER.debug("dwarf_mini: failed to decode one-click-goto notification")
+                return
+            self.state["goto_state"] = OPERATION_STATE_NAMES.get(value.state, "unrecognized")
+            self.state["goto_target_name"] = value.goto_state.target_name or None
+            self.state["tracking"] = value.tracking_state.state == STATE_RUNNING
+            self._notify_listeners()
+        # --- Temporary: payload format investigation (Phase 2 Task 9/10) ---
+        # Pure diagnostics: no known payload decoder exists yet, so just log
+        # the raw bytes at WARNING level (visible without raising the
+        # integration's log level) and don't touch state/listeners. Remove
+        # once Task 10 implements real sensors from the discovered format.
+        elif packet.cmd == CMD_NOTIFY_SDCARD_INFO:
+            _LOGGER.warning(
+                "dwarf_mini: RAW SDCARD_INFO payload (len=%d): %s",
+                len(packet.data), packet.data.hex(),
+            )
+        elif packet.cmd == CMD_NOTIFY_CHARGE:
+            _LOGGER.warning(
+                "dwarf_mini: RAW CHARGE payload (len=%d): %s",
+                len(packet.data), packet.data.hex(),
+            )
 
     async def run_forever(self) -> None:
         """Keep the connection alive, reconnecting with exponential backoff.
