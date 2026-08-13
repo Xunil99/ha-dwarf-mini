@@ -62,7 +62,7 @@ class _DwarfMiniBaseButton(ButtonEntity):
         """
         if response.code != 0:
             raise HomeAssistantError(
-                f"DWARF mini hat den Befehl abgelehnt (code={response.code})",
+                f"DWARF mini rejected the command (code={response.code})",
                 translation_domain=DOMAIN,
                 translation_key="capture_command_rejected",
                 translation_placeholders={"code": str(response.code)},

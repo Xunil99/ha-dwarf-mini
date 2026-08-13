@@ -11,7 +11,7 @@ Home Assistant Integration für das [DwarfLab DWARF mini](https://www.dwarflab.c
 - `sensor` Aufnahmestatus (idle/running/stopping/stopped) mit Fortschritts-Attributen
 - `button` Aufnahme starten / stoppen
 
-Nicht enthalten (siehe [Design-Dokument](../ha-dwarf-mini-notes) für Details, warum):
+Nicht enthalten (bewusste Scope-Entscheidung für v1, siehe interne Design-Notizen):
 Speicherplatz, Ladestatus, Live-View, GoTo/Kalibrierung/Tracking, Fokus.
 
 ## Installation

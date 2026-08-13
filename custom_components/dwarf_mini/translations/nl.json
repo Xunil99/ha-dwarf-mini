@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "DWARF mini verbinden",
+        "data": { "host": "IP-adres of hostnaam" }
+      }
+    },
+    "error": { "cannot_connect": "Verbinding met de DWARF mini mislukt" },
+    "abort": { "already_configured": "Apparaat is al geconfigureerd" }
+  },
+  "exceptions": {
+    "capture_command_rejected": {
+      "message": "DWARF mini heeft het commando geweigerd (code={code})"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": { "name": "Verbonden" }
+    },
+    "sensor": {
+      "battery": { "name": "Batterij" },
+      "capture_state": { "name": "Opnamestatus" }
+    },
+    "button": {
+      "start_capture": { "name": "Opname starten" },
+      "stop_capture": { "name": "Opname stoppen" }
+    }
+  }
+}
