@@ -1,0 +1,12 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "DWARF mini verbinden",
+        "data": { "host": "IP-Adresse oder Hostname" }
+      }
+    },
+    "error": { "cannot_connect": "Verbindung zur DWARF mini fehlgeschlagen" },
+    "abort": { "already_configured": "Gerät ist bereits konfiguriert" }
+  }
+}
