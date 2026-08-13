@@ -38,5 +38,29 @@
     "select": {
       "goto_target": { "name": "GoTo-Ziel" }
     }
+  },
+  "services": {
+    "goto_coordinates": {
+      "name": "GoTo-Koordinaten",
+      "description": "Fährt ein beliebiges RA/Dec-Ziel an, das nicht in der GoTo-Zielliste enthalten ist.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Die DWARF mini, an die das GoTo gesendet wird."
+        },
+        "ra_hours": {
+          "name": "Rektaszension",
+          "description": "Rektaszension des Ziels in Stunden."
+        },
+        "dec_degrees": {
+          "name": "Deklination",
+          "description": "Deklination des Ziels in Grad."
+        },
+        "target_name": {
+          "name": "Zielname",
+          "description": "Optionale Bezeichnung für das Ziel. Ohne Angabe Standard \"RA <Stunden>h Dec <Grad>°\"."
+        }
+      }
+    }
   }
 }

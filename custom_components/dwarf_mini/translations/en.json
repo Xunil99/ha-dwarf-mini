@@ -38,5 +38,29 @@
     "select": {
       "goto_target": { "name": "GoTo target" }
     }
+  },
+  "services": {
+    "goto_coordinates": {
+      "name": "GoTo coordinates",
+      "description": "Slews to an arbitrary RA/Dec target not in the GoTo target list.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The DWARF mini to send the GoTo to."
+        },
+        "ra_hours": {
+          "name": "Right ascension",
+          "description": "Right ascension of the target, in hours."
+        },
+        "dec_degrees": {
+          "name": "Declination",
+          "description": "Declination of the target, in degrees."
+        },
+        "target_name": {
+          "name": "Target name",
+          "description": "Optional label for the target. Defaults to \"RA <hours>h Dec <degrees>°\" if omitted."
+        }
+      }
+    }
   }
 }

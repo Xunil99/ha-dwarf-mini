@@ -12,14 +12,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import DwarfMiniConfigEntry
 from .client import DwarfMiniClient
 from .const import (
-    CMD_ASTRO_START_ONE_CLICK_GOTO_DSO,
     CMD_ASTRO_START_ONE_CLICK_GOTO_SOLAR_SYSTEM,
     DOMAIN,
     GOTO_DSO_TARGETS,
     GOTO_SOLAR_SYSTEM_TARGETS,
     MODULE_ASTRO,
 )
-from .proto_messages import ReqOneClickGotoDSO, ReqOneClickGotoSolarSystem, ResOneClickGoto
+from .goto import async_goto_dso, require_home_location
+from .proto_messages import ReqOneClickGotoSolarSystem, ResOneClickGoto
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,41 +63,17 @@ class DwarfMiniGotoTargetSelect(SelectEntity):
         self._attr_current_option = None
 
     async def async_select_option(self, option: str) -> None:
-        lat = self._hass.config.latitude
-        lon = self._hass.config.longitude
-        # HomeAssistant's own core default for an unconfigured home location
-        # is exactly 0.0/0.0 (homeassistant.core_config.Config.latitude/
-        # longitude default to `0`), not None - so a never-configured HA
-        # instance produces a plausible-looking but bogus GoTo request
-        # instead of an obvious error unless we check for it explicitly.
-        # (0, 0) itself is a real ocean location off West Africa, but for a
-        # home-astronomy setup treating it as "not configured" is by far the
-        # safer assumption - this is a physical GoTo, not a read-only query.
-        if lat == 0 and lon == 0:
-            raise HomeAssistantError(
-                "Bitte zuerst den HA-Heimatort in den Einstellungen konfigurieren"
-            )
-
         if option in GOTO_DSO_TARGETS:
             ra, dec = GOTO_DSO_TARGETS[option]
-            request = ReqOneClickGotoDSO(
-                ra=ra,
-                dec=dec,
-                target_name=option,
-                lon=lon,
-                lat=lat,
-                # shooting_mode=2 and goto_only=False are fixed v1 defaults,
-                # mirroring button.py's DwarfMiniStartCaptureButton: mode 2 is
-                # the astro live-stacking shooting mode (matches the capture
-                # button's own default target), and goto_only=False lets the
-                # device run its normal full one-click sequence (goto +
-                # tracking) rather than stopping short at slew-only. Not
-                # exposed as options: v1 has no shooting-mode-selection UI.
-                shooting_mode=2,
-                goto_only=False,
-            )
-            cmd = CMD_ASTRO_START_ONE_CLICK_GOTO_DSO
+            # Shared with the dwarf_mini.goto_coordinates service (see
+            # goto.py's module docstring) - including the home-location
+            # guard, so this branch and the service can't drift apart on it.
+            await async_goto_dso(self._hass, self._client, ra=ra, dec=dec, target_name=option)
         elif option in GOTO_SOLAR_SYSTEM_TARGETS:
+            # Same home-location guard as the DSO path above (shared
+            # function, not a re-implementation) - the unverified
+            # solar-system path needs it just as much as the verified one.
+            lon, lat = require_home_location(self._hass)
             index = GOTO_SOLAR_SYSTEM_TARGETS[option]
             request = ReqOneClickGotoSolarSystem(
                 index=index,
@@ -113,17 +89,19 @@ class DwarfMiniGotoTargetSelect(SelectEntity):
                 force_start=False,
             )
             cmd = CMD_ASTRO_START_ONE_CLICK_GOTO_SOLAR_SYSTEM
+            _LOGGER.debug(
+                "Sending GoTo request for %s (module=%s cmd=%s)", option, MODULE_ASTRO, cmd
+            )
+            response = await self._client.send_request(MODULE_ASTRO, cmd, request, ResOneClickGoto)
+            if response.code != 0:
+                _LOGGER.warning(
+                    "DWARF mini rejected GoTo to %s (code=%s)", option, response.code
+                )
+                raise HomeAssistantError(
+                    f"DWARF mini rejected GoTo to {option} (code={response.code})"
+                )
         else:
             raise HomeAssistantError(f"Unknown GoTo target: {option}")
 
-        _LOGGER.debug("Sending GoTo request for %s (module=%s cmd=%s)", option, MODULE_ASTRO, cmd)
-        response = await self._client.send_request(MODULE_ASTRO, cmd, request, ResOneClickGoto)
-        if response.code != 0:
-            _LOGGER.warning(
-                "DWARF mini rejected GoTo to %s (code=%s)", option, response.code
-            )
-            raise HomeAssistantError(
-                f"DWARF mini rejected GoTo to {option} (code={response.code})"
-            )
         self._attr_current_option = option
         self.async_write_ha_state()

@@ -95,6 +95,13 @@ GOTO_SOLAR_SYSTEM_TARGETS = {
     "Neptun (experimentell)": 7,
 }
 
+# --- Service: dwarf_mini.goto_coordinates (free-coordinate GoTo, design doc
+# section 3) - reuses the verified ReqOneClickGotoDSO path, see goto.py. ---
+SERVICE_GOTO_COORDINATES = "goto_coordinates"
+ATTR_RA_HOURS = "ra_hours"
+ATTR_DEC_DEGREES = "dec_degrees"
+ATTR_TARGET_NAME = "target_name"
+
 # --- Temporary: payload format investigation (Phase 2 Task 9/10) ---
 # Notify codes exist in the protocol but no known reference implementation
 # decodes their payload. Debug-logged raw bytes below; remove once Task 10
