@@ -17,7 +17,15 @@ from typing import Any, Callable, Coroutine
 import aiohttp
 from google.protobuf.message import DecodeError, Message
 
+from .const import (
+    CMD_NOTIFY_ELE,
+    CMD_NOTIFY_PROGRASS_CAPTURE_RAW_LIVE_STACKING,
+    CMD_NOTIFY_STATE_CAPTURE_RAW_LIVE_STACKING,
+    OPERATION_STATE_NAMES,
+)
 from .proto_messages import (
+    ComResWithInt,
+    ResNotifyProgressCaptureRawLiveStacking,
     TYPE_NOTIFICATION,
     TYPE_REQUEST,
     TYPE_REQUEST_RESPONSE,
@@ -44,22 +52,48 @@ class DwarfMiniClient:
         session: aiohttp.ClientSession,
         ws_url: str,
         client_id: str = "ha-dwarf-mini",
+        reconnect_initial_delay: float = 5.0,
+        reconnect_max_delay: float = 60.0,
     ) -> None:
         self._session = session
         self._ws_url = ws_url
         self._client_id = client_id
+        # Configurable so tests can exercise run_forever()'s backoff/close
+        # interaction without waiting out the real 5s/60s delays.
+        self._reconnect_initial_delay = reconnect_initial_delay
+        self._reconnect_max_delay = reconnect_max_delay
 
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._reader_task: asyncio.Task[None] | None = None
         self._pending: dict[tuple[int, int], _PendingRequest] = {}
         self._notification_handlers: set[NotificationHandler] = set()
         self._lock = asyncio.Lock()
+        # Set by close() and checked by run_forever() so a deliberate shutdown
+        # doesn't race with the reconnect loop — see run_forever()'s docstring.
+        # An Event (not a plain bool) so run_forever() can wake up from its
+        # backoff sleep immediately when close() is called, instead of
+        # discovering the shutdown only after the sleep finishes on its own.
+        self._closing_event = asyncio.Event()
+
+        self._listeners: set[Callable[[], None]] = set()
+        self.state: dict[str, Any] = {
+            "battery_percent": None,
+            "capture_state": None,
+            "progress_current": None,
+            "progress_total": None,
+            "progress_stacked": None,
+        }
+        self.register_notification_handler(self._handle_notification)
 
     @property
     def connected(self) -> bool:
         return self._ws is not None and not self._ws.closed
 
     async def connect(self) -> None:
+        # An explicit connect() call means "be connected" — undo any prior
+        # close()-initiated shutdown intent so run_forever() (if restarted by
+        # the caller) is allowed to reconnect again instead of exiting.
+        self._closing_event.clear()
         if self.connected:
             return
         async with self._lock:
@@ -70,6 +104,10 @@ class DwarfMiniClient:
             self._reader_task.add_done_callback(self._on_reader_task_done)
 
     async def close(self) -> None:
+        # Signal run_forever() (if a caller is running it as a background
+        # task) to stop reconnecting instead of racing to re-establish the
+        # connection this close() is tearing down. See run_forever().
+        self._closing_event.set()
         async with self._lock:
             if self._reader_task:
                 self._reader_task.cancel()
@@ -204,3 +242,120 @@ class DwarfMiniClient:
             if not pending.future.done():
                 pending.future.set_exception(error)
         self._pending.clear()
+
+    def add_listener(self, callback: Callable[[], None]) -> Callable[[], None]:
+        self._listeners.add(callback)
+        return lambda: self._listeners.discard(callback)
+
+    def _notify_listeners(self) -> None:
+        # Isolate each callback: one misbehaving listener raising must not
+        # stop the remaining (possibly unrelated) listeners from being
+        # notified.
+        for callback in list(self._listeners):
+            try:
+                callback()
+            except Exception:  # pragma: no cover - defensive
+                _LOGGER.warning("dwarf_mini: listener callback raised", exc_info=True)
+
+    async def _handle_notification(self, packet: WsPacket) -> None:
+        if packet.cmd == CMD_NOTIFY_ELE:
+            value = ComResWithInt()
+            try:
+                value.ParseFromString(packet.data)
+            except DecodeError:
+                _LOGGER.debug(
+                    "dwarf_mini: failed to decode notification payload (cmd=%s)", packet.cmd
+                )
+                return
+            self.state["battery_percent"] = max(0, min(100, value.value))
+            self._notify_listeners()
+        elif packet.cmd == CMD_NOTIFY_STATE_CAPTURE_RAW_LIVE_STACKING:
+            value = ComResWithInt()
+            if packet.data:
+                try:
+                    value.ParseFromString(packet.data)
+                except DecodeError:
+                    _LOGGER.debug(
+                        "dwarf_mini: failed to decode notification payload (cmd=%s)", packet.cmd
+                    )
+                    return
+            self.state["capture_state"] = OPERATION_STATE_NAMES.get(value.value, "unknown")
+            self._notify_listeners()
+        elif packet.cmd == CMD_NOTIFY_PROGRASS_CAPTURE_RAW_LIVE_STACKING:
+            progress = ResNotifyProgressCaptureRawLiveStacking()
+            try:
+                progress.ParseFromString(packet.data)
+            except DecodeError:
+                _LOGGER.debug(
+                    "dwarf_mini: failed to decode notification payload (cmd=%s)", packet.cmd
+                )
+                return
+            self.state["progress_current"] = progress.current_count
+            self.state["progress_total"] = progress.total_count
+            self.state["progress_stacked"] = progress.stacked_count
+            self._notify_listeners()
+
+    async def run_forever(self) -> None:
+        """Keep the connection alive, reconnecting with exponential backoff.
+
+        Both a reader-loop *exception* (e.g. a DecodeError) and a *clean*
+        disconnect (the server closes the socket; `_reader_loop`'s `async
+        for` simply ends and the task completes with no exception at all)
+        must trigger a backoff-and-retry here — a clean disconnect is in fact
+        the common case (Wi-Fi drop, device sleep), so it cannot be left
+        unhandled. `close()` cancelling `_reader_task` is a third case:
+        `_reader_loop` catches and swallows `CancelledError` itself, so that
+        task, too, completes with no exception. All three therefore need the
+        same post-await handling below, gated by `self._closing_event` so a
+        deliberate close() makes this loop exit instead of immediately
+        reconnecting to the socket close() just tore down.
+
+        The backoff wait itself is `self._closing_event.wait()` under a
+        timeout rather than a plain `asyncio.sleep(delay)`: a bare sleep
+        cannot be interrupted, so a close() arriving mid-backoff would only
+        be noticed once the full (up to `reconnect_max_delay`) delay
+        elapsed — defeating the point of the event. Waiting on the event
+        lets close() wake this loop immediately, while a timeout (no
+        close() during the wait) behaves exactly like the plain sleep did.
+
+        Listener notification: `_notify_listeners()` is called after every
+        successful (re)connect, and again after every disconnect (whether
+        from an exception, a clean close by the peer, or our own close()).
+        This is what lets a push-only consumer — e.g. a future
+        `binary_sensor` reflecting `client.connected` — learn about
+        connectivity changes without polling. `client.connected` is already
+        the single source of truth for that state; there's no separate
+        `state["connected"]` key to keep in sync, `_notify_listeners()` here
+        is purely the event trigger.
+        """
+        delay = self._reconnect_initial_delay
+        while not self._closing_event.is_set():
+            try:
+                await self.connect()
+                self._notify_listeners()  # connectivity (re)established
+                delay = self._reconnect_initial_delay
+                assert self._reader_task is not None
+                await self._reader_task
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # pragma: no cover - network dependent
+                _LOGGER.warning(
+                    "dwarf_mini: connection lost (%s), retrying in %.0fs", exc, delay
+                )
+            else:
+                if not self._closing_event.is_set():
+                    _LOGGER.warning(
+                        "dwarf_mini: connection closed, retrying in %.0fs", delay
+                    )
+
+            self._notify_listeners()  # connectivity lost (error, clean, or close())
+
+            if self._closing_event.is_set():
+                break
+
+            try:
+                await asyncio.wait_for(self._closing_event.wait(), timeout=delay)
+                break  # close() was called while we were waiting out the backoff
+            except asyncio.TimeoutError:
+                pass  # backoff elapsed normally; go around and try to reconnect
+            delay = min(delay * 2, self._reconnect_max_delay)
