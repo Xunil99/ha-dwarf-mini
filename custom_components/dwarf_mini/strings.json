@@ -18,6 +18,10 @@
     "binary_sensor": {
       "connected": { "name": "Connected" }
     },
+    "camera": {
+      "tele": { "name": "Tele" },
+      "wide": { "name": "Wide" }
+    },
     "sensor": {
       "battery": { "name": "Battery" },
       "capture_state": { "name": "Capture state" }

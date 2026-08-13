@@ -1,3 +1,6 @@
 pytest-homeassistant-custom-component
 pytest-asyncio
 pytest-aiohttp
+# Pulled in transitively by homeassistant.components.camera (used by
+# camera.py) - not installed by pytest-homeassistant-custom-component itself.
+PyTurboJPEG==1.8.0

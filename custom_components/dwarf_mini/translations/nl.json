@@ -18,6 +18,10 @@
     "binary_sensor": {
       "connected": { "name": "Verbonden" }
     },
+    "camera": {
+      "tele": { "name": "Tele" },
+      "wide": { "name": "Groothoek" }
+    },
     "sensor": {
       "battery": { "name": "Batterij" },
       "capture_state": { "name": "Opnamestatus" }
