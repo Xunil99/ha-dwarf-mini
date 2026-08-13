@@ -66,3 +66,31 @@ CMD_NOTIFY_STATE_ASTRO_ONE_CLICK_GOTO = 15233
 # --- AutoFocus state (astro.proto comment: 1=running, 3=complete) ---
 AUTOFOCUS_STATE_RUNNING = 1
 AUTOFOCUS_STATE_COMPLETE = 3
+
+# --- GoTo target catalog ---
+# DSO targets: verified path (ReqOneClickGotoDSO), fixed RA(hours)/Dec(degrees).
+GOTO_DSO_TARGETS = {
+    "M31 (Andromedagalaxie)": (0.712, 41.27),
+    "M42 (Orionnebel)": (5.588, -5.39),
+    "M45 (Plejaden)": (3.79, 24.12),
+}
+# Solar-system targets: UNVERIFIED path (ReqOneClickGotoSolarSystem) - dwarfAlp
+# never exercises this command, only the message shape from astro.proto/protocol.proto
+# and the SolarSystemTarget enum values are known. Needs live-hardware verification.
+# Labels carry a "(experimentell)" suffix so the dropdown itself flags these as
+# unverified - notably including "Sonne" (Sun): a mis-parsed/mis-encoded
+# unverified GoTo that slews optics onto the Sun is a potential sensor-damage
+# risk, not just a cosmetic one, if the device firmware doesn't itself guard
+# against it (unknown to us). Don't let a user pick these thinking they're on
+# equal footing with the verified DSO targets above.
+GOTO_SOLAR_SYSTEM_TARGETS = {
+    "Sonne (experimentell)": 9,
+    "Mond (experimentell)": 8,
+    "Merkur (experimentell)": 1,
+    "Venus (experimentell)": 2,
+    "Mars (experimentell)": 3,
+    "Jupiter (experimentell)": 4,
+    "Saturn (experimentell)": 5,
+    "Uranus (experimentell)": 6,
+    "Neptun (experimentell)": 7,
+}

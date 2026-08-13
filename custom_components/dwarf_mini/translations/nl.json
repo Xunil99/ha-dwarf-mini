@@ -29,6 +29,9 @@
     "button": {
       "start_capture": { "name": "Opname starten" },
       "stop_capture": { "name": "Opname stoppen" }
+    },
+    "select": {
+      "goto_target": { "name": "GoTo-doel" }
     }
   }
 }

@@ -12,7 +12,7 @@ from .const import CONF_HOST, CONF_PORT
 # The full v1 platform list. Each platform's async_setup_entry receives the
 # same `entry: DwarfMiniConfigEntry` and reads the client via
 # `entry.runtime_data` (see below) - no hass.data lookup needed.
-PLATFORMS: list[str] = ["binary_sensor", "button", "camera", "sensor"]
+PLATFORMS: list[str] = ["binary_sensor", "button", "camera", "select", "sensor"]
 
 # Plain assignment (not a PEP 695 `type` statement) to match this codebase's
 # existing `from __future__ import annotations` + plain-alias conventions.
